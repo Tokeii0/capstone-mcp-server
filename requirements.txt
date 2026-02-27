@@ -1,0 +1,4 @@
+mcp[cli]>=1.2.0
+capstone>=5.0.0
+lief>=0.14.0
+pydantic>=2.0.0

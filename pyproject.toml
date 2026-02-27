@@ -1,0 +1,26 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "capstone-mcp-server"
+version = "0.1.0"
+description = "Capstone 驱动的反汇编 MCP Server，用于对接大模型"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "mcp[cli]>=1.2.0",
+    "capstone>=5.0.0",
+    "lief>=0.14.0",
+    "pydantic>=2.0.0",
+]
+
+[project.scripts]
+capstone-mcp = "capstone_mcp.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/capstone_mcp"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/capstone_mcp"]
