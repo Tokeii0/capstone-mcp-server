@@ -239,9 +239,34 @@ def read_bytes_at_va(file_path: str, virtual_address: int, size: int) -> tuple[b
     if binary is None:
         raise ValueError(f"Unable to parse binary: {file_path}")
 
-    # Convert VA to file offset
-    offset = binary.virtual_address_to_offset(virtual_address)
+    # Convert VA to file offset (compatible with multiple LIEF versions)
+    offset = _va_to_file_offset(binary, virtual_address)
     with open(file_path, "rb") as f:
         f.seek(offset)
         data = f.read(size)
     return data, virtual_address
+
+
+def _va_to_file_offset(binary: lief.Binary, virtual_address: int) -> int:
+    """Convert a virtual address to a file offset, with LIEF version compatibility."""
+    # LIEF >= 0.14: va_to_offset
+    if hasattr(binary, "va_to_offset"):
+        return binary.va_to_offset(virtual_address)
+    # Older LIEF: virtual_address_to_offset
+    if hasattr(binary, "virtual_address_to_offset"):
+        return binary.virtual_address_to_offset(virtual_address)
+    # Manual fallback: iterate sections to find the mapping
+    imagebase = 0
+    if isinstance(binary, lief.PE.Binary):
+        imagebase = binary.optional_header.imagebase
+    rva = virtual_address - imagebase
+    for section in binary.sections:
+        sec_va = section.virtual_address
+        sec_size = section.size
+        if sec_va <= rva < sec_va + sec_size:
+            # PE section raw data offset
+            if isinstance(binary, lief.PE.Binary):
+                return section.offset + (rva - sec_va)
+            else:
+                return section.file_offset + (rva - sec_va)
+    raise ValueError(f"Cannot map VA 0x{virtual_address:x} to file offset")
