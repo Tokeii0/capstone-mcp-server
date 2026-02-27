@@ -22,6 +22,7 @@
 - **Shellcode 分析**: NOP sled、syscall、jmp/call esp 等模式检测
 - **Syscall 查找**: Linux x86/x64/ARM/ARM64 系统调用表查询
 - **Hex Dump**: 格式化的十六进制转储查看
+- **交叉引用查询**: 在代码中搜索对指定地址的所有引用（call/jump/立即数/内存访问）
 
 ## 提供的 MCP 工具
 
@@ -39,6 +40,8 @@
 | `search_instructions` | 在 hex 字节串中搜索指令模式 |
 | `search_instructions_in_file` | 在二进制文件中搜索指令模式 |
 | `analyze_code_flow` | 对机器码进行控制流分析 |
+| `find_xrefs_hex` | 在 hex 字节串中搜索对目标地址的交叉引用 |
+| `find_xrefs_in_file` | 在二进制文件中搜索对目标地址的交叉引用 |
 
 ### CTF / 逆向扩展工具
 

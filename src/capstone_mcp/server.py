@@ -11,6 +11,7 @@ from .disassembler import (
     analyze_control_flow,
     disassemble,
     disassemble_to_text,
+    find_xrefs,
     get_supported_architectures,
     search_pattern,
 )
@@ -402,7 +403,118 @@ def analyze_code_flow(
 
 
 # ──────────────────────────────────────────────
-# Tool 9: Disassemble Entrypoint
+# Tool 9a: Cross-Reference Search (Hex)
+# ──────────────────────────────────────────────
+@mcp.tool()
+def find_xrefs_hex(
+    hex_code: str,
+    target_address: str,
+    arch: str = "x86_64",
+    base_address: str = "0",
+) -> str:
+    """Find all cross-references to a target address in hex-encoded machine code.
+
+    Searches for call, jump, immediate value, and memory displacement references
+    to the specified target address.
+
+    Args:
+        hex_code: Hex-encoded machine code bytes.
+        target_address: Target address to find references to (hex string, e.g. "0x401000").
+        arch: CPU architecture. Default: x86_64.
+        base_address: Base address. Default: "0".
+
+    Returns:
+        List of cross-references with source address, type, and instruction.
+    """
+    try:
+        arch_type = ArchType(arch)
+    except ValueError:
+        return f"Error: Unsupported architecture '{arch}'."
+
+    cleaned = hex_code.replace(" ", "").replace("\n", "").replace("\\x", "")
+    try:
+        code_bytes = bytes.fromhex(cleaned)
+    except ValueError as e:
+        return f"Error: Invalid hex string - {e}"
+
+    base = int(base_address, 0)
+    target = int(target_address, 0)
+    xrefs = find_xrefs(code_bytes, arch_type, base, target)
+
+    if not xrefs:
+        return f"No cross-references found to 0x{target:x}."
+
+    lines = [f"Found {len(xrefs)} cross-reference(s) to 0x{target:x}:", ""]
+    for x in xrefs:
+        lines.append(f"  {x['from']}  [{x['type']:<14s}]  {x['instruction']}")
+    return "\n".join(lines)
+
+
+# ──────────────────────────────────────────────
+# Tool 9b: Cross-Reference Search (File)
+# ──────────────────────────────────────────────
+@mcp.tool()
+def find_xrefs_in_file(
+    file_path: str,
+    target_address: str,
+    section_name: str = ".text",
+    arch: Optional[str] = None,
+) -> str:
+    """Find all cross-references to a target address in a binary file's section.
+
+    Scans the specified section for all instructions that reference the target
+    address via call, jump, immediate operand, or memory displacement.
+
+    Args:
+        file_path: Absolute path to the binary file.
+        target_address: Target address to find references to (hex string, e.g. "0x401000").
+        section_name: Section to scan. Default: ".text".
+        arch: CPU architecture. Auto-detected if omitted.
+
+    Returns:
+        List of cross-references with source address, type, and instruction.
+    """
+    try:
+        info = parse_binary(file_path)
+    except (FileNotFoundError, ValueError) as e:
+        return f"Error: {e}"
+
+    arch_type = None
+    if arch:
+        try:
+            arch_type = ArchType(arch)
+        except ValueError:
+            return f"Error: Unsupported architecture '{arch}'."
+    else:
+        arch_type = info.detected_arch
+        if arch_type is None:
+            return "Error: Cannot auto-detect architecture. Please specify the 'arch' parameter."
+
+    try:
+        code_bytes, va = read_section_bytes(file_path, section_name)
+    except ValueError as e:
+        return f"Error: {e}"
+
+    target = int(target_address, 0)
+    xrefs = find_xrefs(code_bytes, arch_type, va, target)
+
+    if not xrefs:
+        return f"No cross-references found to 0x{target:x} in section '{section_name}'."
+
+    lines = [
+        f"File: {os.path.basename(file_path)}",
+        f"Section: {section_name}",
+        f"Target: 0x{target:x}",
+        f"Found {len(xrefs)} cross-reference(s):",
+        "",
+    ]
+    for x in xrefs:
+        lines.append(f"  {x['from']}  [{x['type']:<14s}]  {x['instruction']}")
+    return "\n".join(lines)
+
+
+# ──────────────────────────────────────────────
+# Tool 10: Disassemble Entrypoint
 # ──────────────────────────────────────────────
 @mcp.tool()
 def disassemble_entrypoint(

@@ -87,17 +87,24 @@ class Instruction:
 
 def _classify_groups(insn: CsInsn) -> list[str]:
     """Classify instruction into semantic groups."""
+    # Skip data pseudo-instructions generated in SKIPDATA mode (id == 0)
+    # Accessing group/detail info on them raises CS_ERR_SKIPDATA
+    if insn.id == 0:
+        return []
     groups = []
-    if insn.group(CS_GRP_CALL):
-        groups.append("call")
-    if insn.group(CS_GRP_JUMP):
-        groups.append("jump")
-    if insn.group(CS_GRP_RET):
-        groups.append("ret")
-    if insn.group(CS_GRP_INT):
-        groups.append("interrupt")
-    if insn.group(CS_GRP_IRET):
-        groups.append("iret")
+    try:
+        if insn.group(CS_GRP_CALL):
+            groups.append("call")
+        if insn.group(CS_GRP_JUMP):
+            groups.append("jump")
+        if insn.group(CS_GRP_RET):
+            groups.append("ret")
+        if insn.group(CS_GRP_INT):
+            groups.append("interrupt")
+        if insn.group(CS_GRP_IRET):
+            groups.append("iret")
+    except capstone.CsError:
+        pass
     return groups
 
 
@@ -257,3 +264,84 @@ def analyze_control_flow(
         "returns": rets,
         "summary": summary,
     }
+
+
+def find_xrefs(
+    code: bytes,
+    arch: ArchType,
+    base_address: int,
+    target_address: int,
+) -> list[dict]:
+    """Find all cross-references to a target address in disassembled code.
+
+    Searches for call, jump, immediate, and memory displacement references.
+    Returns a list of xref entries with source address, type, and instruction.
+    """
+    md = create_engine(arch)
+    xrefs: list[dict] = []
+
+    # Determine operand module based on architecture
+    is_x86 = arch in (ArchType.X86_16, ArchType.X86_32, ArchType.X86_64)
+    is_arm = arch in (ArchType.ARM, ArchType.ARM_THUMB)
+    is_arm64 = arch == ArchType.ARM64
+    is_mips = arch in (ArchType.MIPS32, ArchType.MIPS64, ArchType.MIPS32_BE, ArchType.MIPS64_BE)
+
+    for insn in md.disasm(code, base_address):
+        if insn.id == 0:
+            continue
+
+        ref_type = None
+        try:
+            groups = _classify_groups(insn)
+
+            if is_x86:
+                from capstone.x86 import X86_OP_IMM, X86_OP_MEM
+                for op in insn.operands:
+                    if op.type == X86_OP_IMM and op.imm == target_address:
+                        ref_type = "call" if "call" in groups else "jump" if "jump" in groups else "immediate"
+                        break
+                    elif op.type == X86_OP_MEM and op.mem.disp == target_address and op.mem.base == 0 and op.mem.index == 0:
+                        ref_type = "mem_read" if "call" not in groups else "call_indirect"
+                        break
+                    elif op.type == X86_OP_MEM and op.mem.disp == target_address:
+                        ref_type = "mem_offset"
+                        break
+            elif is_arm:
+                from capstone.arm import ARM_OP_IMM, ARM_OP_MEM
+                for op in insn.operands:
+                    if op.type == ARM_OP_IMM and op.imm == target_address:
+                        ref_type = "call" if "call" in groups else "jump" if "jump" in groups else "immediate"
+                        break
+                    elif op.type == ARM_OP_MEM and op.mem.disp == target_address:
+                        ref_type = "mem_offset"
+                        break
+            elif is_arm64:
+                from capstone.arm64 import ARM64_OP_IMM, ARM64_OP_MEM
+                for op in insn.operands:
+                    if op.type == ARM64_OP_IMM and op.imm == target_address:
+                        ref_type = "call" if "call" in groups else "jump" if "jump" in groups else "immediate"
+                        break
+                    elif op.type == ARM64_OP_MEM and op.mem.disp == target_address:
+                        ref_type = "mem_offset"
+                        break
+            elif is_mips:
+                from capstone.mips import MIPS_OP_IMM, MIPS_OP_MEM
+                for op in insn.operands:
+                    if op.type == MIPS_OP_IMM and op.imm == target_address:
+                        ref_type = "call" if "call" in groups else "jump" if "jump" in groups else "immediate"
+                        break
+                    elif op.type == MIPS_OP_MEM and op.mem.disp == target_address:
+                        ref_type = "mem_offset"
+                        break
+
+        except (capstone.CsError, Exception):
+            continue
+
+        if ref_type:
+            xrefs.append({
+                "from": f"0x{insn.address:x}",
+                "type": ref_type,
+                "instruction": f"{insn.mnemonic} {insn.op_str}",
+            })
+
+    return xrefs

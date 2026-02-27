@@ -22,6 +22,7 @@ An MCP (Model Context Protocol) server based on the [Capstone](https://www.capst
 - **Shellcode analysis**: NOP sled, syscall, jmp/call esp pattern detection
 - **Syscall lookup**: Linux x86/x64/ARM/ARM64 syscall table queries
 - **Hex Dump**: Formatted hexadecimal dump viewer
+- **Cross-reference search**: Find all references to a target address in code (call/jump/immediate/memory access)
 
 ## MCP Tools
 
@@ -39,6 +40,8 @@ An MCP (Model Context Protocol) server based on the [Capstone](https://www.capst
 | `search_instructions` | Search instruction patterns in a hex byte string |
 | `search_instructions_in_file` | Search instruction patterns in a binary file |
 | `analyze_code_flow` | Perform control flow analysis on machine code |
+| `find_xrefs_hex` | Find cross-references to a target address in hex byte string |
+| `find_xrefs_in_file` | Find cross-references to a target address in a binary file |
 
 ### CTF / Reverse Engineering Tools
 
